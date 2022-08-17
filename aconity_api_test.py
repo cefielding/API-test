@@ -1,5 +1,6 @@
 import requests
 import json
+from datetime import datetime
 
 login_details = {
     'rest_url':'http://172.16.17.240:9000/',
@@ -24,32 +25,73 @@ def login(details):
     headers["X-XSRF-token"] = api_token
     headers["Authorization"] = f"XSRF-token={api_token}"
 
-    #list of variables
-    projectName = []
-    jobsName = []
-    sessions = []
-    sessionID = []
-    jobID = []
+    ######list of variables#####
+    projectName = []          #1
+    jobsName = []             #2
+    jobsTime = []             #3
+    velocity = []             #4
+    factor = []               #4
+    thickness = []            #4
+    inputParam = []           #4
+    power = []                #5
+    speed = []                #5
+    focus = []                #5
+    laserParam = []           #5
+    ############################
 
-    #Project name
+    # (1) Project name
     p = requests.get('http://172.16.17.240:9000/projects', headers= headers)
     projects = p.json()
     for data in projects:
         projectName.append(data['name'])
+    #print(projectName)
 
-
-    #Name of job
+    # (2) Name of job
     j = requests.get('http://172.16.17.240:9000/jobs', headers= headers) 
     jobs = j.json()
     for data in jobs:
         jobsName.append(data['name'])
-   
-    #Session log
-    #s = requests.get('http://172.16.17.240:9000/sessions', headers= headers) 
-    #Log = s.json()
-    #for data in Log:
-    #    sessions.append(data) 
+    #print(jobsName)
 
+    # (3) Timestamp of Job# --->requires = job_id
+    l = requests.get('http://172.16.17.240:9000/jobs/62c2be634a0000c700fb287b', headers= headers)
+    laser = l.json()
+    for data in laser['history']:
+        integer = int(data['timestamp'])/1000
+        date = datetime.utcfromtimestamp(integer).strftime('%Y-%m-%d %H:%M:%S')
+        jobsTime.append(date)
+    #print(jobsTime)
+
+    # (4) Input parameters# --->requires = job_id
+    p = requests.get('http://172.16.17.240:9000/jobs/62c2be634a0000c700fb287b', headers= headers)
+    parameters = p.json()
+    for data in parameters['params']:
+        if data['name']== 'deposition_velocity':
+            velocity.append((data['name'],data['value'], data['unit']))
+        elif data['name']== 'supply_factor':
+            factor.append((data['name'],data['value'], data['unit']))
+        elif data['name']== 'layer_thickness':
+            thickness.append((data['name'],data['value'], data['unit']))
+    inputParam.append((velocity, factor, thickness))
+    #print(inputParam)
+
+
+    # (5) Laser parameters#  --->requires = job_id
+    s = requests.get('http://172.16.17.240:9000/jobs/62c2be634a0000c700fb287b', headers= headers) 
+    Log = s.json()
+    for data in Log['partRefs']:
+        params = data['params']       
+        for p in params:
+            if p['name'] == 'laser_power':
+                power.append((p['name'], p['value'], p['unit']))
+            if p['name'] == 'mark_speed':
+                speed.append((p['name'], p['value'], p['unit']))
+            if p['name'] == 'defocus':
+                focus.append((p['name'], p['value'], p['unit']))               
+    laserParam.append((power[0], speed[0], focus[0]))
+    print(laserParam)
+
+    # -------- GETTING THE IDS -------- #
     #for i in sessions:
     #    newURL = ('http://172.16.17.240:9000/sessions/'+i)
     #    s1 = requests.get(newURL, headers= headers)  
@@ -61,20 +103,6 @@ def login(details):
     #            s2 = requests.get(newURL, headers= headers)
     #            Log2 = s2.json()
     #            jobID.append(Log2)
-
-
-
-    #Parameters# --->requires = job_id
-    p = requests.get('http://172.16.17.240:9000/jobs/62c2be634a0000c700fb287b', headers= headers)
-    parameters = p.json()
-    #for data in parameters['params']:
-    #    print(data['name'],"----> value:", data['value'], data['unit'])
-
-    #Laser data# --->requires = job_id
-    l = requests.get('http://172.16.17.240:9000/jobs/62c2be634a0000c700fb287b', headers= headers)
-    laser = l.json()
-    for data in laser['projectName']:
-        print("-->", data)
 
     return projects
 
