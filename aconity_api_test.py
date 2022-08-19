@@ -1,6 +1,13 @@
+from http.client import REQUEST_HEADER_FIELDS_TOO_LARGE
 import requests
 import json
 from datetime import datetime
+import numpy as np
+
+# ###################################################################################### #
+# The following code gives you all job details such as timestamp, parameters and project #
+# so long as you have the job id in the first place                                      #
+# ###################################################################################### #
 
 login_details = {
     'rest_url':'http://172.16.17.240:9000/',
@@ -12,12 +19,12 @@ login_details = {
 headers = { 'content-type': 'application/json' }
 
 def login(details):
+    # Allows access into the acoities database
     payload = json.dumps({"email":details["email"], "password": details["password"]}) 
     r = requests.post('http://172.16.17.240:9000/login',payload, headers= headers)
     response = r.json()
 
-
-    # Get API token
+    # Get API token to allow access
     api_token = response["authToken"]
 
     # Set headers for subsquent API requests
@@ -28,23 +35,26 @@ def login(details):
     ######list of variables#####
     projectName = []          #1
     jobsName = []             #2
-    jobsTime = []             #3
-    velocity = []             #4
-    factor = []               #4
-    thickness = []            #4
-    inputParam = []           #4
-    power = []                #5
-    speed = []                #5
-    focus = []                #5
-    laserParam = []           #5
+    jobID = []                #3
+    TimeStamp = []            #3           
+    jobsTime = []             #4
+    velocity = []             #5
+    factor = []               #5
+    thickness = []            #5
+    inputParam = []           #5
+    power = []                #6
+    speed = []                #6
+    focus = []                #6
+    laserParam = []           #6
     ############################
 
-    # (1) Project name
-    p = requests.get('http://172.16.17.240:9000/projects', headers= headers)
+    # (1) Job Project name
+    p = requests.get('http://172.16.17.240:9000/jobs/62c2be634a0000c700fb287b', headers= headers)
     projects = p.json()
-    for data in projects:
-        projectName.append(data['name'])
+    projName = projects['projectName']
+    print(projName)  
     #print(projectName)
+
 
     # (2) Name of job
     j = requests.get('http://172.16.17.240:9000/jobs', headers= headers) 
@@ -53,16 +63,43 @@ def login(details):
         jobsName.append(data['name'])
     #print(jobsName)
 
-    # (3) Timestamp of Job# --->requires = job_id
-    l = requests.get('http://172.16.17.240:9000/jobs/62c2be634a0000c700fb287b', headers= headers)
-    laser = l.json()
-    for data in laser['history']:
+    # (3) job ID
+    j = requests.get('http://172.16.17.240:9000/jobs', headers= headers) 
+    jobs = j.json()
+    for data in jobs:
+        idArray = data['_id']
+        for key, value in idArray.items():
+            # gets list together of all ids
+            jobID.append(value)
+
+            newURL = ('http://172.16.17.240:9000/jobs/'+value)
+            s1 = requests.get(newURL, headers= headers)  
+            idInfo = s1.json()
+
+            for data in idInfo['history']:
+                Time = data['timestamp']
+            # gets list of all timestamping dates
+            TimeStamp.append(Time)
+    # gets a list of the position of largest value to smallest
+    indexList = np.argsort(-np.array(TimeStamp))
+    SortedJobs = []
+    for data in indexList:
+        # sorts jobs into a list of highest to lowest according to most recent
+        SortedJobs.append(jobID[data])
+
+
+    # (4) Timestamp of Job --->requires = job_id
+    t = requests.get('http://172.16.17.240:9000/jobs/62c2be634a0000c700fb287b', headers= headers)
+    time = t.json()
+    for data in time['history']:
+        # divide y 1000 to convert from miliseconds
         integer = int(data['timestamp'])/1000
+        #formats the timestamp into a readable form
         date = datetime.utcfromtimestamp(integer).strftime('%Y-%m-%d %H:%M:%S')
         jobsTime.append(date)
     #print(jobsTime)
 
-    # (4) Input parameters# --->requires = job_id
+    # (5) Input parameters --->requires = job_id
     p = requests.get('http://172.16.17.240:9000/jobs/62c2be634a0000c700fb287b', headers= headers)
     parameters = p.json()
     for data in parameters['params']:
@@ -76,10 +113,10 @@ def login(details):
     #print(inputParam)
 
 
-    # (5) Laser parameters#  --->requires = job_id
-    s = requests.get('http://172.16.17.240:9000/jobs/62c2be634a0000c700fb287b', headers= headers) 
-    Log = s.json()
-    for data in Log['partRefs']:
+    # (6) Laser parameters  --->requires = job_id
+    l = requests.get('http://172.16.17.240:9000/jobs/62c2be634a0000c700fb287b', headers= headers) 
+    laser = l.json()
+    for data in laser['partRefs']:
         params = data['params']       
         for p in params:
             if p['name'] == 'laser_power':
@@ -87,38 +124,12 @@ def login(details):
             if p['name'] == 'mark_speed':
                 speed.append((p['name'], p['value'], p['unit']))
             if p['name'] == 'defocus':
-                focus.append((p['name'], p['value'], p['unit']))               
+                focus.append((p['name'], p['value'], p['unit']))     
+    # takes the 0 position as there are two copies of each data entry          
     laserParam.append((power[0], speed[0], focus[0]))
-    print(laserParam)
-
-    # -------- GETTING THE IDS -------- #
-    #for i in sessions:
-    #    newURL = ('http://172.16.17.240:9000/sessions/'+i)
-    #    s1 = requests.get(newURL, headers= headers)  
-    #    Log1 = s1.json()
-    #    sessionID.append(Log1)
-    #    for j in sessionID:
-    #        for k in j:
-    #            newURL = 'http://172.16.17.240:9000/sessions/'+i+'/configId/'+k
-    #            s2 = requests.get(newURL, headers= headers)
-    #            Log2 = s2.json()
-    #            jobID.append(Log2)
+    #print(laserParam)
 
     return projects
-
-
-
-def api_request( endpoint ):
-    # Endpoint is the URL you need to access ie "/sessions" or "/sessions/{sessionId}/configId/{conf_id}" etc.
-    # Construct URL
-    url = f"{login_details['url']}/{endpoint}"
-    # Make GET request
-    r.get( url, headers = headers )
-    
-
-    print(r.text()) # or use r.json()?
-
-    return r.text()
 
 
 
